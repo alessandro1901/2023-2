@@ -1,0 +1,193 @@
+clear all, clc, close all;
+%-----------------------------------------Parte sin codificacion
+
+% Valores Yub
+Yub = linspace(1, 10, 100); % Abarco valores de 0 a 10 YubdB
+YubdB = 10 * log10(Yub);
+
+% Genero lista de Probabilidades sin codificar con Yub de 0 a 10 dB
+Pub = qfunc(sqrt(2 * Yub)); %función Q(x)
+
+% Grafica Teorica limitada de 2 a 10 dB
+figure(1);
+plot(YubdB, Pub, 'DisplayName', 'Teórico sin codificar');
+title('Pub y BER vs Yub');
+xlim([2, 10]);
+xlabel('Yub (dB)');
+ylabel('Pb');
+set(gca, 'YScale', 'log'); %colocar el eje y a escala logarítmica
+hold on;
+
+%----------------------------------------Parte simulada
+
+% Secuencia larga de bits (1 Millón está bien)
+mensaje = entrada_modulador(1000012);%entrada_modulador(1000000); %secuencia larga de 1's y 0's
+
+%Valores necesarios para generar ruido:
+%Se incorporarán los valores en la función normrnd(media,desviación
+% estándar, M (filas), N (columnas))
+
+% Valores de gammas
+Yubv_dB = 2:2:12; %requieren pasarse a valores reales
+Yubv = 10 .^ (Yubv_dB / 10);
+
+% Varianzas
+varianzas = 1 ./ (2 * Yubv);
+
+% Desviacion estandar
+desviacion = sqrt(varianzas);
+
+% Programa
+
+for i = 1:length(desviacion)
+    % Generación de ruidos
+    ruido_gaussiano = normrnd(0, desviacion(i), 1, length(mensaje));
+    % Genero la salida del sampling and holding
+    sampling = salida_demodulador(mensaje, ruido_gaussiano); %señal
+    %modulada con errores
+    % Comparador del demodulador
+    salida_demo = comparador(sampling); %conversión a 1's y 0's
+    % Contabilizo el error
+    error = 0;
+    for k = 1:length(mensaje)
+        if mensaje(k) ~= salida_demo(k)
+            error = error + 1;
+        end
+    end
+    % Agrego al BER los datos
+    BER1(i) = error / length(mensaje);
+end
+
+for i=1:length(Yubv_dB)
+    fprintf('Para Yubv = %1$.1f', Yubv_dB(i))
+    fprintf(' dB, ')
+    fprintf('BER = %1$E', BER1(i))
+    fprintf('\n')
+end
+fprintf('\n')
+%Grafico la grafica con los datos simulados
+
+plot(Yubv_dB, BER1, 'x', 'Color', 'red', 'DisplayName', 'Simulado sin codificar');
+legend('show');
+hold off
+
+%-------------------------------------------Parte con codificar
+% Valores Yub
+Yb = linspace(1, 10, 100); % Abarco valores de 0 a 10 YubdB
+YbdB = 10 * log10(Yub);
+
+% Valores de k y n
+n = 31;
+k = 26;
+t = 1; % Ya que el dmin siempre es 3
+Rc = k/n;
+Yc = Rc * Yb;
+
+% Genero lista de Probabilidades sin codificar con Yub de 0 a 10 dB
+alfa = qfunc(sqrt(2*Yc));
+
+% Probabilidad
+comb = nchoosek(n-1,t); %¿el profesor aceptará esta función?
+Pb = comb * (alfa.^(t+1));
+
+% Grafica Teorica
+figure(2)
+plot(YbdB, Pb, 'DisplayName', 'Teórico con codificar');
+title('Pub y BER vs Yb');
+xlim([2, 10]);
+xlabel('Yb (dB)');
+ylabel('Pb');
+set(gca, 'YScale', 'log'); %colocar el eje y a escala logarítmica
+hold on
+
+%----------------------------------------Parte simulada
+
+%Se utiliza la misma secuencia de ceros generada anteriormente.
+
+X=Hamming_31_26(mensaje);
+
+%Valores necesarios para generar ruido:
+%Se incorporarán los valores en la función normrnd(media,desviación
+% estándar, M (filas), N (columnas))
+
+% Valores de gammas
+Ybv_dB = 2:2:12; %requieren pasarse a valores reales
+Ybv = 10 .^ (Ybv_dB / 10);
+
+% Valores de k y n
+n = 31;
+k = 26;
+t = 1; % Ya que el dmin siempre es 3
+Rc = k/n;
+Ycv = Rc * Ybv;
+
+% Varianzas
+varianzas = 1 ./ (2 * Ycv);
+
+% Desviacion estandar
+desviacion = sqrt(varianzas);
+
+% Programa
+
+for i = 1:length(desviacion)
+    % Generación de ruidos
+    ruido_gaussiano = normrnd(0, desviacion(i), 1, length(X));
+    % Genero la salida del sampling and holding
+    sampling = salida_demodulador(X, ruido_gaussiano); %señal
+    %modulada con errores
+    % Comparador del demodulador
+    salida_demo = comparador(sampling); %conversión a 1's y 0's
+    %DEC (Técnica del Síndrome):
+    
+    %X estimado:
+
+    X_est = Sindrome_Hamming_31_26(salida_demo);
+
+    %Se contabilizará el BER en la salida del decodificador
+    % Contabilizo el error
+    error = 0;
+    for k = 1:length(X)
+        if X(k) ~= X_est(k)
+            error = error + 1;
+        end
+    end
+    % Agrego al BER los datos
+    BER2(i) = error / length(X);
+end
+
+for i=1:length(Ybv_dB)
+    fprintf('Para Ybv = %1$.1f', Ybv_dB(i))
+    fprintf(' dB, ')
+    fprintf('BER = %1$E', BER2(i))
+    fprintf('\n')
+end
+
+plot(Ybv_dB, BER2, 'x', 'Color', 'red', 'DisplayName', 'Simulado con codificación');
+legend('show');
+hold off
+
+%Superponiendo gráficas con codificación y sin codificación
+figure(3);
+
+%Sin codificación:
+plot(YubdB, Pub, 'Color','black')%, 'DisplayName', 'Teórico sin codificar');
+title('Pub/Pb y BER vs Yub/Yb');
+xlim([2, 10]);
+xlabel('Yub/Yb (dB)');
+ylabel('Pub/Pb');
+set(gca, 'YScale', 'log'); %colocar el eje y a escala logarítmica
+hold on
+plot(Yubv_dB, BER1, 'x', 'Color', 'black')%, 'DisplayName', 'Simulado sin codificar');
+
+%Con codificación:
+plot(YbdB, Pb, 'Color', 'red')%, 'DisplayName', 'Teórico con codificar');
+%title('Pub y BER vs Yb');
+%xlim([2, 10]);
+%xlabel('Yb (dB)');
+%ylabel('Pb');
+set(gca, 'YScale', 'log'); %colocar el eje y a escala logarítmica
+plot(Ybv_dB, BER2, 'x', 'Color', 'red')% 'DisplayName', 'Simulado con codificación');
+
+legend('Pub','','Pb','')
+
+

@@ -1,0 +1,4 @@
+% Función que devuelve el valor de la función Q
+function resultado = qfunc(x)
+    resultado = 0.5 * erfc(x / sqrt(2));
+end
